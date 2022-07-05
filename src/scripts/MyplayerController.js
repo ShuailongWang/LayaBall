@@ -1,3 +1,4 @@
+import GameManager from "./GameManager";
 
 export default class MyplayerController extends Laya.Script {
     constructor() {
@@ -12,6 +13,11 @@ export default class MyplayerController extends Laya.Script {
 
     onAwake() {
         this.rig = this.owner.getComponent(Laya.RigidBody);
+        Laya.stage.on("ResetMyPlayer", this, this.resetPoint);//监听事件
+    }
+
+    onDestroy() {
+        Laya.stage.off("ResetMyPlayer", this, this.resetPoint);
     }
 
     onDisable() {
@@ -41,7 +47,7 @@ export default class MyplayerController extends Laya.Script {
             this.canJump = false;
             console.log('spane');
             var x = this.rig.linearVelocity.x;
-            this.rig.setVelocity({x:x, y:-11});
+            this.rig.setVelocity({x:x, y:-13});
         }
     }
 
@@ -66,5 +72,14 @@ export default class MyplayerController extends Laya.Script {
         if (other.owner.name == "bottomLine") {
             this.canJump = true;
         }
+    }
+
+    //重置
+    resetPoint() {
+        this.owner.x = 660;
+        this.owner.y = 770;
+        this.rig.setVelocity({x:0,y:0});
+
+        this.owner.parent.getComponent(GameManager).addAIScore();
     }
 }

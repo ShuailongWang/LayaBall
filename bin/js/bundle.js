@@ -1,6 +1,97 @@
 (function () {
     'use strict';
 
+    class ScorePanel extends Laya.Script {
+        constructor() {
+            super();
+            /** @prop {name:score_mine, tips:"玩家得分", type:Node, default:null} */
+            /** @prop {name:score_ai, tips:"AI得分", type:Node, default:null} */
+            /** @prop {name:name_mine, tips:"玩家名字", type:Node, default:null} */
+            /** @prop {name:name_ai, tips:"AI名字", type:Node, default:null} */
+            /** @prop {name:down_time, tips:"倒计时", type:Node, default:null} */
+            
+
+            this.score_mine = null;
+            this.score_ai = null;
+            this.name_mine = null;
+            this.name_ai = null;
+            this.down_time = null;
+        }
+
+        onAwake() {
+            
+        }
+        updateMyScore(score) {
+            this.score_mine.text = score;
+        }
+
+        updateAIScore(score) {
+            this.score_ai.text = score;
+        }
+
+        updateDownTime(time) {
+            this.down_time.text = time;
+        }
+    }
+
+    class GameManager extends Laya.Script {
+        constructor() {
+            super();
+            /** @prop {name:scoreView, tips:"得分面板", type:Node, default:null} */
+            /** @prop {name:startText, tips:"开始倒计时", type:Node, default:null} */
+
+            this.startText = null;
+            this.scoreView = null;
+            this.scorePannelView = null;
+
+            this.myScore = 0;
+            this.AiScore = 0;
+
+            this.timer = 0;
+            this.timeNum = 3;
+            this.startGameBol = false;
+        }
+
+        onAwake() {
+            this.scorePannelView = this.scoreView.getComponent(ScorePanel);
+        }
+
+        onUpdate() {
+            if (this.startGameBol == false) {
+                this.timer += Laya.timer.delta/1000;
+                if (this.timer >= 1) {
+                    this.timer = 0;
+                    this.timeNum--;
+                    if (this.timeNum <= 0) {
+                        this.startGameBol = true;
+                        this.startText.visible = false;
+                        this.startGame();
+                        return;
+                    }
+                    this.startText.text = this.timeNum;
+                }
+            }
+        }
+
+        startGame() {
+            Laya.SoundManager.playSound("sound/startWistle.mp3", 1, 
+            new Laya.Handler(this, function() {
+                Laya.stage.event("KStartGameNotification");
+            }));
+        }
+
+        //
+        addMyScore() {
+            this.myScore++;
+            this.scorePannelView.updateMyScore(this.myScore);
+        }
+
+        addAIScore() {
+            this.AiScore++;
+            this.scorePannelView.updateAIScore(this.AiScore);
+        }
+    }
+
     class AiplayerController extends Laya.Script {
         constructor() {
             super();
@@ -17,10 +108,17 @@
             this.minJumpDistance = 200; //ai出发跳跃高度
             this.canJump = true;
             this.jumpSpeed = -10;
+            this.lastX = 0;
+            this.offsetX = 0;
         }
 
         onAwake() {
             this.rig = this.owner.getComponent(Laya.RigidBody);
+            Laya.stage.on("ResetAIPlayer", this, this.resetPoint);//监听事件
+        }
+
+        onDestroy() {
+            Laya.stage.off("ResetAIPlayer", this, this.resetPoint);
         }
 
         onDisable() {
@@ -34,8 +132,18 @@
         onUpdate() {
             //是否在区间
             if (this.ball.x > this.minX && this.ball.x < this.maxX) {
-                this.owner.x = this.ball.x;
-                this.rotationShote();
+                //this.owner.x = this.ball.x + 40;
+                //移动速度
+                var targetX = this.ball.x + this.offsetX;
+                Laya.MathUtil.lerp(this.owner.x, targetX, Laya.timer.delta/1000*15);
+                
+                //鞋子旋转
+                if (this.owner.x > this.lastX) {//右
+                    this.shoe.rotation = -23;
+                } else {//左
+                    this.shoe.rotation = 23;
+                }
+                this.lastX = this.owner.x;
 
                 //判断球距离头部100（斜边*斜边=x*x + y*y），跳跃
                 var delx = this.owner.x - this.ball.x;
@@ -45,22 +153,13 @@
                     this.canJump = false;
 
                     var x = this.rig.linearVelocity.x;
-                    this.rig.setVelocity({x:x, y:this.jumpSpeed});
+                    var y = this.jumpSpeed - this.getRandow(1, 5);
+                    this.rig.setVelocity({x:x, y:y});
                 }
 
-            }
-        }
-
-        //鞋子旋转
-        rotationShote() {
-            if (this.rig.linearVelocity.x > 0.1) {//右
-                console.log('rotationShote111:' + this.rig.linearVelocity.x);
-                this.shoe.rotation = 23;
-            } else if (this.rig.linearVelocity.x < -0.1) {//左
-                this.shoe.rotation = -23;
-                console.log('rotationShote222:' + this.rig.linearVelocity.x);
-            } else {//停止
+            } else {
                 this.shoe.rotation = 0;
+                this.offsetX = this.getRandow(20, 40);
             }
         }
 
@@ -72,6 +171,21 @@
             if (other.owner.name == "bottomLine") {
                 this.canJump = true;
             }
+        }
+
+        getRandow(min, max) {
+            var value = max - min;
+            value = Math.random() * value;
+            return value + min;
+        }
+
+        //重置
+        resetPoint() {
+            this.owner.x = 1260;
+            this.owner.y = 770;
+            this.rig.setVelocity({x:0,y:0});
+
+            this.owner.parent.getComponent(GameManager).addMyScore();
         }
     }
 
@@ -88,6 +202,11 @@
 
         onAwake() {
             this.rig = this.owner.getComponent(Laya.RigidBody);
+            Laya.stage.on("ResetMyPlayer", this, this.resetPoint);//监听事件
+        }
+
+        onDestroy() {
+            Laya.stage.off("ResetMyPlayer", this, this.resetPoint);
         }
 
         onDisable() {
@@ -117,7 +236,7 @@
                 this.canJump = false;
                 console.log('spane');
                 var x = this.rig.linearVelocity.x;
-                this.rig.setVelocity({x:x, y:-11});
+                this.rig.setVelocity({x:x, y:-13});
             }
         }
 
@@ -143,6 +262,68 @@
                 this.canJump = true;
             }
         }
+
+        //重置
+        resetPoint() {
+            this.owner.x = 660;
+            this.owner.y = 770;
+            this.rig.setVelocity({x:0,y:0});
+
+            this.owner.parent.getComponent(GameManager).addAIScore();
+        }
+    }
+
+    class BallHandle extends Laya.Script {
+        constructor() {
+            super();
+            
+            this.rig = null;
+        }
+
+        onAwake() {
+           this.rig = this.owner.getComponent(Laya.RigidBody);
+           Laya.stage.on("KStartGameNotification", this, this.startGame);
+        }
+
+        onDestroy() {
+            Laya.stage.off("KStartGameNotification", this, this.startGame);
+        }
+
+        startGame() {
+            this.rig.type = "dynamic";
+        }
+
+        //碰撞检测
+        onTriggerEnter(other) {
+            console.log(other);
+
+            //判断是否碰到地面
+            if (other.owner.name == "bottomLine") {
+                Laya.SoundManager.playSound("sound/Ball-Hit-Ground.wav", 1);
+                if (this.owner.x < 960) {//left
+                    this.resetBallPoint(752);
+                    Laya.stage.event("ResetMyPlayer");
+                } else {//right
+                    this.resetBallPoint(1170);
+                    Laya.stage.event("ResetAIPlayer");
+                }
+            }
+
+            if (other.owner.name == "myPlayer") {
+                Laya.SoundManager.playSound("sound/BallHit-01.mp3", 1);
+            } else if (other.owner.name == "aiPlayer") {
+                Laya.SoundManager.playSound("sound/BallHit-02.mp3", 1);
+            } else if (other.owner.name == "pole") {
+                Laya.SoundManager.playSound("sound/ballHitsMiddlePole.mp3", 1);
+            }
+        }
+
+        resetBallPoint(x) {
+            this.owner.x = x;
+            this.owner.y = 260;
+            this.rig.setVelocity({x:0,y:0});
+            this.rig.angularVelocity = 0;
+        }
     }
 
     /**This class is automatically generated by LayaAirIDE, please do not make any modifications. */
@@ -153,6 +334,9 @@
             let reg = Laya.ClassUtils.regClass;
     		reg("scripts/AIPlayerController.js",AiplayerController);
     		reg("scripts/MyplayerController.js",MyplayerController);
+    		reg("scripts/ScorePanel.js",ScorePanel);
+    		reg("scripts/BallHandle.js",BallHandle);
+    		reg("scripts/GameManager.js",GameManager);
         }
     }
     GameConfig.width = 1920;

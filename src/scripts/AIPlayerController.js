@@ -1,3 +1,4 @@
+import GameManager from "./GameManager";
 
 export default class AiplayerController extends Laya.Script {
     constructor() {
@@ -21,6 +22,11 @@ export default class AiplayerController extends Laya.Script {
 
     onAwake() {
         this.rig = this.owner.getComponent(Laya.RigidBody);
+        Laya.stage.on("ResetAIPlayer", this, this.resetPoint);//监听事件
+    }
+
+    onDestroy() {
+        Laya.stage.off("ResetAIPlayer", this, this.resetPoint);
     }
 
     onDisable() {
@@ -34,7 +40,10 @@ export default class AiplayerController extends Laya.Script {
     onUpdate() {
         //是否在区间
         if (this.ball.x > this.minX && this.ball.x < this.maxX) {
-            this.owner.x = this.ball.x + 40;
+            //this.owner.x = this.ball.x + 40;
+            //移动速度
+            var targetX = this.ball.x + this.offsetX;
+            Laya.MathUtil.lerp(this.owner.x, targetX, Laya.timer.delta/1000*15);
             
             //鞋子旋转
             if (this.owner.x > this.lastX) {//右
@@ -58,7 +67,7 @@ export default class AiplayerController extends Laya.Script {
 
         } else {
             this.shoe.rotation = 0;
-            this.offsetX = this.getRandow(20, 50);
+            this.offsetX = this.getRandow(20, 40);
         }
     }
 
@@ -76,5 +85,14 @@ export default class AiplayerController extends Laya.Script {
         var value = max - min;
         value = Math.random() * value;
         return value + min;
+    }
+
+    //重置
+    resetPoint() {
+        this.owner.x = 1260;
+        this.owner.y = 770;
+        this.rig.setVelocity({x:0,y:0});
+
+        this.owner.parent.getComponent(GameManager).addMyScore();
     }
 }
